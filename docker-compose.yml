@@ -1,0 +1,78 @@
+version: "3"
+
+services:
+
+  redis:
+    restart: on-failure
+    image: redis
+    expose:
+      - 6379
+    networks:
+      - poll-tier
+      - back-tier
+
+  db:
+    restart: on-failure
+    image: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      PGDATA: /data/postgres
+    networks:
+      - poll-tier
+      - back-tier
+      - result-tier
+      - postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - "./schema.sql:/docker-entrypoint-initdb.d/init.sql"
+  
+  worker:
+    restart: on-failure
+    build: ./worker
+    depends_on:
+      - db
+      - redis
+    environment:
+      - 0.0.0.0
+    networks:
+      - back-tier
+  
+  result:
+    restart: on-failure
+    build: ./result
+    ports:
+      - "5001:80"
+    depends_on:
+      - db
+    environment:
+      - 0.0.0.0
+    networks:
+      - result-tier
+
+
+  poll:
+    restart: on-failure
+    build: ./poll
+    ports:
+      - "5000:80"
+    depends_on:
+      - redis
+    environment:
+      - 0.0.0.0
+    networks:
+      - poll-tier
+
+networks:
+  poll-tier:
+    name: redis
+  result-tier:
+    name: db
+  back-tier:
+    name: redis, db
+  postgres:
+    driver: bridge
+  
+volumes:
+  db-data:
+
